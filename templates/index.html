@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Magnetometer Data</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <h1>Lab Mag Data</h1>
+    
+    <!-- Buttons for controlling the process -->
+    <!-- Input for setting maximum data points -->
+    <label for="maxPoints">Max Data Points:</label>
+    <input type="number" id="maxPoints" value="200" min="37" step="1">
+    <button onclick="updateMaxPoints()">Set Max Points</button>
+
+    <button onclick="setFrequency(18)">Set Frequency: 18Hz</button>
+    <button onclick="setFrequency(37)">Set Frequency: 37Hz</button>
+    <button onclick="setFrequency(75)">Set Frequency: 75Hz</button>
+
+    <!-- Canvas element for displaying the plot -->
+    <canvas id="myChart" width="800" height="400"></canvas>
+
+    <script>
+        let myChart;
+        let fetchDataInterval;
+
+    
+        function setFrequency(frequency) {
+             // Clear existing interval
+            if (fetchDataInterval) {
+                clearInterval(fetchDataInterval);
+            }
+
+            // Set the new interval based on the frequency
+            let intervalTime = 1000; // Default to 1 second
+            if (frequency === 18) {
+                intervalTime = 1000/18; // 2 seconds for 18Hz
+            } else if (frequency === 37) {
+                intervalTime = 1000/37; // 1 second for 37Hz
+            } else if (frequency === 75) {
+                intervalTime = 1000/75; // 0.5 seconds for 75Hz
+            }
+
+            // Reset the interval with the new time
+            fetchDataInterval = setInterval(fetchDataAndPlot, intervalTime);
+
+            // Post frequency change to the server
+            fetch(`/set_frequency/${frequency}`, {
+                method: 'POST'
+            });
+        }
+
+        function updateMaxPoints() {
+            const maxPoints = parseInt(document.getElementById('maxPoints').value);
+            if (!isNaN(maxPoints)) {
+                // Check current length and adjust if necessary
+                if (myChart.data.labels.length > maxPoints) {
+                    const removeCount = myChart.data.labels.length - maxPoints;
+                    myChart.data.labels.splice(0, removeCount);
+                    myChart.data.datasets.forEach((dataset) => {
+                        dataset.data.splice(0, removeCount);
+                    });
+                }
+                // Update the chart
+                myChart.update();
+            }
+        }
+
+    
+        function fetchDataAndPlot() {
+        fetch('/get_point')
+        .then(response => response.json())
+        .then(data => {
+            // Data received from the server
+            const xData = data.x_data;
+            const yDataX = data.y_data_x;
+            const yDataY = data.y_data_y;
+            const yDataZ = data.y_data_z;
+
+            if (!myChart) {
+                // Create the chart if it doesn't exist
+                const ctx = document.getElementById('myChart').getContext('2d');
+                myChart = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: [],
+                        datasets: [{
+                            label: 'X-axis',
+                            data: [],
+                            backgroundColor: 'rgba(255, 99, 132, 0.2)',
+                            borderColor: 'rgba(255, 99, 132, 1)',
+                            borderWidth: 1,
+                            pointRadius: 0, // Hides points on the line
+                        }, {
+                            label: 'Y-axis',
+                            data: [],
+                            backgroundColor: 'rgba(54, 162, 235, 0.2)',
+                            borderColor: 'rgba(54, 162, 235, 1)',
+                            borderWidth: 1,
+                            pointRadius: 0, // Hides points on the line
+                        }, {
+                            label: 'Z-axis',
+                            data: [],
+                            backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                            borderColor: 'rgba(75, 192, 192, 1)',
+                            borderWidth: 1,
+                            pointRadius: 0, // Hides points on the line
+                        }]
+                    },
+                    options: {
+                        scales: {
+                            xAxes: [{ 
+                                type: 'time',
+                                time: {
+                                    unit: 'second'
+                                },
+                                scaleLabel: {
+                                    display: true,
+                                    labelString: 'Time (s)'
+                                },
+                                gridLines: {  
+                                    display: false
+                                }
+                            }],
+                            yAxes: [{  
+                                scaleLabel: {
+                                    display: true,
+                                    labelString: 'Mag Value microTeslas'
+                                },
+                                gridLines: {  
+                                    display: false
+                                }
+                            }]
+                        }
+                    }
+
+                });
+            }
+
+            // Update the chart data
+            myChart.data.labels.push(...xData);
+            myChart.data.datasets[0].data.push(...yDataX);
+            myChart.data.datasets[1].data.push(...yDataY);
+            myChart.data.datasets[2].data.push(...yDataZ);
+
+            // Remove the oldest data points if the array length exceeds 200
+            const maxPoints = parseInt(document.getElementById('maxPoints').value) || 200; // Default to 200 if undefined
+            if (myChart.data.labels.length > maxPoints) {
+                // Remove the first 37 elements from the labels array
+                myChart.data.labels.splice(0, 1);
+                // Remove the first 37 elements from each dataset
+                myChart.data.datasets.forEach((dataset) => {
+                    dataset.data.splice(0, 1);
+                });
+            }
+
+            // Update the chart
+            myChart.update('none');
+
+        })
+        .catch(error => {
+            console.error('Error fetching data:', error);
+        });
+    }
+    
+        // Call fetchDataAndPlot initially
+        window.onload = function() {
+            fetchDataAndPlot(); // Call once immediately
+            setFrequency(37); // Set default frequency and start interval
+        };
+        
+        
+    </script>
+    
+</body>
+</html>
